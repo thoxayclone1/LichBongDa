@@ -12,6 +12,131 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Generate AppIcon Assets
+        run: |
+          mkdir -p Sources/Assets.xcassets/AppIcon.appiconset
+          cat << 'EOF' > generate_icon.swift
+          import AppKit
+          import CoreGraphics
+
+          func createIcon(size: Int, filename: String) {
+              let rep = NSBitmapImageRep(
+                  bitmapDataPlanes: nil,
+                  pixelsWide: size,
+                  pixelsHigh: size,
+                  bitsPerSample: 8,
+                  samplesPerPixel: 4,
+                  hasAlpha: true,
+                  isPlanar: false,
+                  colorSpaceName: .deviceRGB,
+                  bytesPerRow: 0,
+                  bitsPerPixel: 0
+              )!
+              NSGraphicsContext.saveGraphicsState()
+              NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+              guard let ctx = NSGraphicsContext.current?.cgContext else { return }
+
+              let s = CGFloat(size)
+              let center = CGPoint(x: s / 2, y: s / 2)
+
+              // 1. Nền Gradient Dark Navy sang trọng
+              let colorSpace = CGColorSpaceCreateDeviceRGB()
+              let bgColors = [
+                  CGColor(red: 0.04, green: 0.06, blue: 0.11, alpha: 1.0),
+                  CGColor(red: 0.09, green: 0.15, blue: 0.26, alpha: 1.0)
+              ] as CFArray
+              let gradient = CGGradient(colorsSpace: colorSpace, colors: bgColors, locations: [0.0, 1.0])!
+              ctx.drawLinearGradient(gradient, start: CGPoint(x: 0, y: s), end: CGPoint(x: s, y: 0), options: [])
+
+              // 2. Vòng tròn đồng hồ Neon Cyan
+              let radius = s * 0.36
+              ctx.setStrokeColor(CGColor(red: 0.0, green: 0.90, blue: 0.96, alpha: 0.25))
+              ctx.setLineWidth(s * 0.045)
+              ctx.addArc(center: center, radius: radius, startAngle: 0, endAngle: .pi * 2, clockwise: false)
+              ctx.strokePath()
+
+              // Cung nhấn màu Cam Vàng (Giờ cao điểm / Trận Hot)
+              ctx.setStrokeColor(CGColor(red: 1.0, green: 0.62, blue: 0.12, alpha: 0.95))
+              ctx.setLineCap(.round)
+              ctx.setLineWidth(s * 0.05)
+              ctx.addArc(center: center, radius: radius, startAngle: .pi * 0.15, endAngle: .pi * 0.85, clockwise: false)
+              ctx.strokePath()
+
+              // 3. Các vạch chia giờ
+              for i in 0..<12 {
+                  let angle = CGFloat(i) * (.pi / 6.0)
+                  let isMajor = (i % 3 == 0)
+                  let innerR = radius * (isMajor ? 0.76 : 0.83)
+                  let outerR = radius * 0.92
+                  let p1 = CGPoint(x: center.x + cos(angle) * innerR, y: center.y + sin(angle) * innerR)
+                  let p2 = CGPoint(x: center.x + cos(angle) * outerR, y: center.y + sin(angle) * outerR)
+                  ctx.setStrokeColor(isMajor ? CGColor(red: 0.0, green: 0.95, blue: 1.0, alpha: 0.95) : CGColor(red: 1, green: 1, blue: 1, alpha: 0.35))
+                  ctx.setLineWidth(s * (isMajor ? 0.024 : 0.012))
+                  ctx.move(to: p1)
+                  ctx.addLine(to: p2)
+                  ctx.strokePath()
+              }
+
+              // 4. Kim giờ & Kim phút (Tạo hình chữ V chiến thắng)
+              ctx.setLineCap(.round)
+              // Kim giờ
+              ctx.setStrokeColor(CGColor(red: 1.0, green: 1.0, blue: 1.0, alpha: 0.95))
+              ctx.setLineWidth(s * 0.042)
+              ctx.move(to: center)
+              ctx.addLine(to: CGPoint(x: center.x - radius * 0.38, y: center.y + radius * 0.32))
+              ctx.strokePath()
+
+              // Kim phút Cyan
+              ctx.setStrokeColor(CGColor(red: 0.0, green: 0.92, blue: 0.98, alpha: 1.0))
+              ctx.setLineWidth(s * 0.034)
+              ctx.move(to: center)
+              ctx.addLine(to: CGPoint(x: center.x + radius * 0.52, y: center.y + radius * 0.45))
+              ctx.strokePath()
+
+              // Tâm đồng hồ màu Cam Đỏ
+              let dotR = s * 0.048
+              ctx.setFillColor(CGColor(red: 1.0, green: 0.45, blue: 0.15, alpha: 1.0))
+              ctx.fillEllipse(in: CGRect(x: center.x - dotR, y: center.y - dotR, width: dotR * 2, height: dotR * 2))
+
+              NSGraphicsContext.restoreGraphicsState()
+              if let pngData = rep.representation(using: .png, properties: [:]) {
+                  try? pngData.write(to: URL(fileURLWithPath: "Sources/Assets.xcassets/AppIcon.appiconset/\(filename)"))
+              }
+          }
+
+          let icons: [(Int, String)] = [
+              (40, "Icon-20@2x.png"),
+              (60, "Icon-20@3x.png"),
+              (58, "Icon-29@2x.png"),
+              (87, "Icon-29@3x.png"),
+              (80, "Icon-40@2x.png"),
+              (120, "Icon-40@3x.png"),
+              (120, "Icon-60@2x.png"),
+              (180, "Icon-60@3x.png"),
+              (1024, "Icon-1024.png")
+          ]
+          for (sz, name) in icons { createIcon(size: sz, filename: name) }
+          EOF
+          swift generate_icon.swift
+          rm generate_icon.swift
+
+          cat << 'EOF' > Sources/Assets.xcassets/AppIcon.appiconset/Contents.json
+          {
+            "images" : [
+              { "filename" : "Icon-20@2x.png", "idiom" : "iphone", "scale" : "2x", "size" : "20x20" },
+              { "filename" : "Icon-20@3x.png", "idiom" : "iphone", "scale" : "3x", "size" : "20x20" },
+              { "filename" : "Icon-29@2x.png", "idiom" : "iphone", "scale" : "2x", "size" : "29x29" },
+              { "filename" : "Icon-29@3x.png", "idiom" : "iphone", "scale" : "3x", "size" : "29x29" },
+              { "filename" : "Icon-40@2x.png", "idiom" : "iphone", "scale" : "2x", "size" : "40x40" },
+              { "filename" : "Icon-40@3x.png", "idiom" : "iphone", "scale" : "3x", "size" : "40x40" },
+              { "filename" : "Icon-60@2x.png", "idiom" : "iphone", "scale" : "2x", "size" : "60x60" },
+              { "filename" : "Icon-60@3x.png", "idiom" : "iphone", "scale" : "3x", "size" : "60x60" },
+              { "filename" : "Icon-1024.png", "idiom" : "ios-marketing", "scale" : "1x", "size" : "1024x1024" }
+            ],
+            "info" : { "author" : "xcode", "version" : 1 }
+          }
+          EOF
+
       - name: Install XcodeGen & Generate Project
         env:
           HOMEBREW_NO_AUTO_UPDATE: 1
